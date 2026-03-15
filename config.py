@@ -12,6 +12,20 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
+def _get_env_int(name: str, default: int) -> int:
+    value = os.getenv(name)
+    if value is None or value.strip() == "":
+        return default
+    return int(value)
+
+
+def _get_env_float(name: str, default: float) -> float:
+    value = os.getenv(name)
+    if value is None or value.strip() == "":
+        return default
+    return float(value)
+
 BASE_DIR = Path(__file__).resolve().parent
 LOGS_DIR = BASE_DIR / "logs"
 TRACKER_FILE = BASE_DIR / "sent_articles.json"
@@ -27,12 +41,12 @@ GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 DELAY_BETWEEN_REQUESTS = 2
 DELAY_BETWEEN_API_CALLS = 1
 REQUEST_TIMEOUT = 20
-SOURCE_TIME_BUDGET_SECONDS = int(os.getenv("SOURCE_TIME_BUDGET_SECONDS", "45"))
-REQUEST_RETRY_ATTEMPTS = int(os.getenv("REQUEST_RETRY_ATTEMPTS", "2"))
-REQUEST_RETRY_BACKOFF_SECONDS = float(os.getenv("REQUEST_RETRY_BACKOFF_SECONDS", "1"))
-RSS_MAX_ENTRIES_PER_SOURCE = int(os.getenv("RSS_MAX_ENTRIES_PER_SOURCE", "8"))
-RSS_FULL_ARTICLE_FETCH_LIMIT = int(os.getenv("RSS_FULL_ARTICLE_FETCH_LIMIT", "3"))
-HTML_MAX_ARTICLES_PER_SOURCE = int(os.getenv("HTML_MAX_ARTICLES_PER_SOURCE", "6"))
+SOURCE_TIME_BUDGET_SECONDS = _get_env_int("SOURCE_TIME_BUDGET_SECONDS", 45)
+REQUEST_RETRY_ATTEMPTS = _get_env_int("REQUEST_RETRY_ATTEMPTS", 2)
+REQUEST_RETRY_BACKOFF_SECONDS = _get_env_float("REQUEST_RETRY_BACKOFF_SECONDS", 1)
+RSS_MAX_ENTRIES_PER_SOURCE = _get_env_int("RSS_MAX_ENTRIES_PER_SOURCE", 8)
+RSS_FULL_ARTICLE_FETCH_LIMIT = _get_env_int("RSS_FULL_ARTICLE_FETCH_LIMIT", 3)
+HTML_MAX_ARTICLES_PER_SOURCE = _get_env_int("HTML_MAX_ARTICLES_PER_SOURCE", 6)
 TRACKER_RETENTION_DAYS = 7
 SUMMARIZER_MAX_RETRIES = 3
 
