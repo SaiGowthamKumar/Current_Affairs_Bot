@@ -11,7 +11,15 @@ from typing import Any
 
 from groq import Groq
 
-from config import DELAY_BETWEEN_API_CALLS, GROQ_API_KEY, GROQ_MODEL, SUMMARIZER_MAX_RETRIES
+from config import (
+    DELAY_BETWEEN_API_CALLS,
+    GROQ_429_BACKOFF_SECONDS,
+    GROQ_API_KEY,
+    GROQ_MAX_SUMMARIES_PER_RUN,
+    GROQ_MIN_SECONDS_BETWEEN_CALLS,
+    GROQ_MODEL,
+    SUMMARIZER_MAX_RETRIES,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +45,18 @@ class NewsSummarizer:
     def __init__(self, api_key: str | None = None) -> None:
         self.api_key = api_key or GROQ_API_KEY
         self.client = Groq(api_key=self.api_key) if self.api_key else None
+        self._last_call_at: float | None = None
+
+    def _throttle(self) -> None:
+        now = time.monotonic()
+        if self._last_call_at is None:
+            self._last_call_at = now
+            return
+
+        elapsed = now - self._last_call_at
+        if elapsed < GROQ_MIN_SECONDS_BETWEEN_CALLS:
+            time.sleep(GROQ_MIN_SECONDS_BETWEEN_CALLS - elapsed)
+        self._last_call_at = time.monotonic()
 
     def _extract_json(self, raw_text: str) -> dict[str, Any]:
         raw_text = raw_text.strip()
@@ -66,16 +86,17 @@ class NewsSummarizer:
         user_prompt = (
             f"Article Title: {article['title']}\n"
             f"Source: {article['source_name']}\n"
-            f"Content: {article['content'][:8000]}\n\n"
+            f"Content: {article['content'][:4500]}\n\n"
             "Summarize this for civil services exam preparation."
         )
 
         for attempt in range(1, SUMMARIZER_MAX_RETRIES + 1):
             try:
+                self._throttle()
                 response = self.client.chat.completions.create(
                     model=GROQ_MODEL,
                     temperature=0.1,
-                    max_tokens=700,
+                    max_tokens=450,
                     response_format={"type": "json_object"},
                     messages=[
                         {"role": "system", "content": SYSTEM_PROMPT},
@@ -92,6 +113,7 @@ class NewsSummarizer:
                 time.sleep(DELAY_BETWEEN_API_CALLS)
                 return summary
             except Exception as exc:  # noqa: BLE001
+                message = str(exc)
                 logger.warning(
                     "Groq summarization failed for '%s' on attempt %s/%s: %s",
                     article["title"],
@@ -99,6 +121,10 @@ class NewsSummarizer:
                     SUMMARIZER_MAX_RETRIES,
                     exc,
                 )
+                if "429" in message or "Too Many Requests" in message:
+                    time.sleep(GROQ_429_BACKOFF_SECONDS)
+                elif "json_validate_failed" in message or "Failed to generate JSON" in message:
+                    time.sleep(GROQ_MIN_SECONDS_BETWEEN_CALLS)
                 if attempt < SUMMARIZER_MAX_RETRIES:
                     time.sleep(attempt * 2)
         logger.error("Skipping article after repeated Groq failures: %s", article["title"])
@@ -106,9 +132,16 @@ class NewsSummarizer:
 
     def summarize_all_articles(self, articles: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
         grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        attempted = 0
         for article in articles:
+            if attempted >= GROQ_MAX_SUMMARIES_PER_RUN:
+                logger.info(
+                    "Stopping after %s Groq summaries to stay within the free-tier budget",
+                    GROQ_MAX_SUMMARIES_PER_RUN,
+                )
+                break
+            attempted += 1
             summary = self.summarize_article(article)
-            if not summary:
-                continue
-            grouped[summary["category"]].append(summary)
+            if summary:
+                grouped[summary["category"]].append(summary)
         return dict(grouped)
