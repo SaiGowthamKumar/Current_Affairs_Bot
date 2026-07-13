@@ -56,7 +56,7 @@ pip install -r requirements.txt
 
 ```env
 GROQ_API_KEY=your_groq_api_key_here
-GROQ_MODEL=llama-3.3-70b-versatile
+GROQ_MODEL=openai/gpt-oss-120b
 GMAIL_SENDER_EMAIL=your_gmail@gmail.com
 GMAIL_APP_PASSWORD=your_16_digit_gmail_app_password
 RECIPIENT_EMAIL=your_email@gmail.com
